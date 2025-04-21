@@ -145,7 +145,7 @@ def main():
                                 "Scripts assume data and adjacency matrix files are in 'data/'.")
     
     
-    thread = threading.Thread(target=collect_metrics)
+    thread = threading.Thread(target=collect_metrics, kwargs={'failsafe': True})
     thread.start()
 
     if args.mode == "base":

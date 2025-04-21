@@ -102,7 +102,7 @@ def benchmark_preprocess(h5File, dataset, key=None):
 
         return torch.tensor(x,dtype=torch.float),torch.tensor(y,dtype=torch.float)
 
-def collect_metrics():
+def collect_metrics(failsafe=False):
     
     
     try:
@@ -137,7 +137,7 @@ def collect_metrics():
                 os.remove("flag.txt")
                 break
 
-            if os.path.isfile("stats.csv"):
+            if os.path.isfile("stats.csv") or failsafe:
                 with open("system_stats.csv", mode="w", newline="") as f:
                     writer = csv.writer(f)
 
