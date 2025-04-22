@@ -322,7 +322,7 @@ def main():
     debug = args.debug.lower() == "true"
     print(args.mode,allGPU, flush=True)
     batch_size = 64
-    epochs = 100
+    epochs = 30
     
 
     global_start = time.time()
