@@ -25,15 +25,30 @@ while ! [ -f cluster.info ]; do
 done
 
 # Optional profiling for node 1
-# mpiexec -n 1 --ppn 1 --cpu-bind none --hosts $monitor_node python3 worker_monitor.py &
+mpiexec -n 1 --ppn 1 --cpu-bind none --hosts $monitor_node python3 worker_monitor.py &
 
 
 
 echo "$total workers launching" 
 mpiexec -n $total --ppn $gpus --cpu-bind none --hostfile worker_nodefile.txt dask worker --local-directory /local/scratch --scheduler-file cluster.info --nthreads 8 --memory-limit 512GB &
 
+
+# **************************** Client Options ****************************
 echo "Launching client"
-mpiexec -n 1 --ppn 1 --cpu-bind none --hosts $scheduler_node `which python3` pems_ddp.py --mode $mode -np $gpus -g $allGPU --dataset pems --dist True  &
+
+
+# baseline DDP
+mpiexec -n 1 --ppn 1 --cpu-bind none --hosts $scheduler_node `which python3` opt_baseline.py --mode dask -np $gpus --dataset pems --dist True  &
+
+# distributed-index-batching
+# mpiexec -n 1 --ppn 1 --cpu-bind none --hosts $scheduler_node `which python3` pems_ddp.py --mode index -np $gpus -g true --dataset pems --dist True  &
+
+# generalized-distributed-index-batching
+# mpiexec -n 1 --ppn 1 --cpu-bind none --hosts $scheduler_node `which python3` opt_pems_ddp.py --mode dask-index -np $gpus --dataset pems --dist True  &
+
+
+# batch shuffling baseline DDP
+# mpiexec -n 1 --ppn 1 --cpu-bind none --hosts $scheduler_node `which python3` opt_pems_ddp.py --mode dask -np $gpus --dataset pems --dist True  &
 
 
 wait

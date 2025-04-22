@@ -29,7 +29,8 @@ def collect_metrics():
             timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
             
             process = psutil.Process()
-            rss = process.memory_info().rss
+            rss = sum(proc.memory_info().rss for proc in psutil.process_iter(attrs=['memory_info']))
+
             mem = psutil.virtual_memory()
             system_memory_used = rss / (1024**2)  # Convert to MB
             system_memory_total = mem.total / (1024**2)  # Convert to MB
