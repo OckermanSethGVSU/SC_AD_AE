@@ -1,8 +1,7 @@
 
+This repository contains the artifacts associated with the 2025 SC paper "PGT-I: Scaling Spatiotemporal GNNs with Memory-Efficient Distributed Training". The primary purpose of this repository is archival and to consolidate all utilized code in a single location. We have not tested the code in its consoliated form, and as such, we expect there will be bugs associated with its direct use.  We integrated a cleaned, refactored, and thoroughly tested version of our methods into the [PyTorch Geoemtric Temporal](https://github.com/benedekrozemberczki/pytorch_geometric_temporal) library, and we recommend using index-batching via the official PGT repository.  
 
-
-## PyTorch Geometric Temporal - Index
-
+--------------------------------------------------------------------------------
 This repository is an extension of [PyTorch Geometric Temporal](https://github.com/benedekrozemberczki/pytorch_geometric_temporal) (PGT) designed specifically for memory efficiency, scalability, and distributed training. In particular, we make the following high-level open-source software contributions:
 
 * Intergrated batching and sequence to sequence prediction into PGT-DCRNN
