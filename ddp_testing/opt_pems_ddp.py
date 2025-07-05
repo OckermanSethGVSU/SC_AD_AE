@@ -28,68 +28,11 @@ from dask_pytorch_ddp import dispatch, results
 from dask.distributed import wait as Wait
 
 
-"""
-PyTorch wrapper which sets its data
-equal to the data you pass it
-"""
-class CopyDataset(Dataset):
-    def __init__(self, data):
-        self.data = data # Dummy indices as data
-
-    def __len__(self):
-        return len(self.data)
-
-    def __getitem__(self, idx):
-        return self.data[idx]
-
-
-"""
-Enables indicies to be split in 
-a contingious way.
-"""
-class EvenChunkDistributedSampler(Sampler):
-    def __init__(self, dataset, num_replicas=None, rank=None, shuffle=False, drop_last=False):
-        super().__init__(dataset)
-        if num_replicas is None:
-            num_replicas = torch.distributed.get_world_size()
-        if rank is None:
-            rank = torch.distributed.get_rank()
-        
-        self.dataset = dataset
-        self.num_replicas = num_replicas
-        self.rank = rank
-        self.shuffle = shuffle
-        self.drop_last = drop_last
-
-        # Determine the number of samples per worker
-        total_size = len(self.dataset)
-        if self.drop_last:
-            self.num_samples = total_size // self.num_replicas
-            self.total_size = self.num_samples * self.num_replicas
-        else:
-            self.num_samples = math.ceil(total_size / self.num_replicas)
-            self.total_size = self.num_samples * self.num_replicas
-
-        # Generate indices
-        self.indices = list(range(total_size))
-        if self.shuffle:
-            self.indices = torch.randperm(total_size).tolist()
-
-    def __iter__(self):
-        # Split the dataset into even contiguous chunks
-        start = self.rank * self.num_samples
-        end = min(start + self.num_samples, len(self.indices))
-        return iter(self.indices[start:end])
-
-    def __len__(self):
-        return self.num_samples
-
-
 def parse_arguments():
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description="Description of your program.")
     parser.add_argument(
-        "-m", "--mode", type=str, default="index", help="Which version to run"
+        "-m", "--mode", type=str, default="dask", help="Which version to run"
     )
     parser.add_argument(
         "-g", "--gpu", type=str, default="False", help="Should data be preprocessed and migrated directly to the GPU"
@@ -168,7 +111,8 @@ def train(args=None, epochs=None, batch_size=None, allGPU=False, debug=False,
         std = torch.tensor(std.compute()).to(device)
         
     
-        
+    
+    
     
     pre_t2 = time.time()
     if worker_rank == 0:
@@ -223,7 +167,7 @@ def train(args=None, epochs=None, batch_size=None, allGPU=False, debug=False,
         
 
         for batch in train_b:
-            
+
             if args.mode == "dask":
                 t1 = time.time()
                 X_batch, y_batch = torch.tensor(x_train[batch].compute(), dtype=torch.float32), torch.tensor(y_train[batch].compute(),dtype=torch.float32)
@@ -266,10 +210,12 @@ def train(args=None, epochs=None, batch_size=None, allGPU=False, debug=False,
             optimizer.step()
             train_loss += loss.item()
             f2 = time.time()
-  
+
+          
             if debug and worker_rank == 0:
-                print(f"Train Batch: {i}/{total}; items: {batch_items}; fetch {t2 - t1} | else {f2 - f1}", end="\n", flush="True")
+                print(f"Train Batch: {i}/{total}", end="\r", flush="True")
                 i += 1
+            
 
         train_loss /= len(train_dataloader)
 
@@ -285,7 +231,7 @@ def train(args=None, epochs=None, batch_size=None, allGPU=False, debug=False,
         with torch.no_grad():
             for batch in val_dataloader:
                 batch = np.array(batch)
-
+                
                 if args.mode == "dask":
                     batch = batch - x_train.shape[0]
 
@@ -327,8 +273,9 @@ def train(args=None, epochs=None, batch_size=None, allGPU=False, debug=False,
                 val_loss += loss.item()
                 f2 = time.time()
                 if debug and worker_rank == 0:
-                    print(f"Val Batch: {i}/{total}; items: {batch_items}; fetch {t2 - t1} | else {f2 - f1}", end="\n", flush=True)
+                    print(f"Val Batch: {i}/{total}", end="\r", flush=True)
                     i += 1
+                
 
         # # average valdiation across all ranks
         val_tensor = torch.tensor([val_loss, len(val_dataloader)])

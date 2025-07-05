@@ -47,7 +47,7 @@ mpiexec -n 1 --ppn 1 --cpu-bind none --hosts $scheduler_node `which python3` opt
 # mpiexec -n 1 --ppn 1 --cpu-bind none --hosts $scheduler_node `which python3` opt_pems_ddp.py --mode dask-index -np $gpus --dataset pems --dist True  &
 
 
-# batch shuffling baseline DDP
+# batch shuffling or baseline DDP
 # mpiexec -n 1 --ppn 1 --cpu-bind none --hosts $scheduler_node `which python3` opt_pems_ddp.py --mode dask -np $gpus --dataset pems --dist True  &
 
 

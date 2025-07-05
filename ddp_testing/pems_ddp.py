@@ -93,10 +93,9 @@ def train(args=None, epochs=None, batch_size=None, allGPU=False, debug=False,
         else:
             data, mean, std, x_train, x_val, x_test = IndexDataset.preprocess(filepath,12,args.dataset, h5_key=key,add_time_in_day=True)
 
-        
         train_dataset = IndexDataset(x_train,data,12,gpu=allGPU)
         val_dataset = IndexDataset(x_val,data,12,gpu=allGPU)
-        
+
     if args.mode == "dask":
         train_dataset = DaskDataset(x_train, y_train, lazy_batching=True)
         val_dataset = DaskDataset(x_val, y_val, lazy_batching=True)
@@ -268,10 +267,19 @@ def main():
     batch_size = 64
     epochs = 30
     
+
     if not os.path.isdir("data"):
         raise FileNotFoundError("Error: The 'data/' subdirectory is missing. "
                                 "Scripts assume data and adjacency matrix files are in 'data/'.")
     
+    if args.mode == "dask" or args.mode == "dask-index":
+        print("These are the unoptimized versions of dask and dask-index batching that call '.compute()'" \
+        " on individual dataset items. This will result is poor performance. We suggest using opt_baseline.py or opt_pems_ddp.py instead.")
+
+        choice = input("Enter yes to proceed: ")
+        if choice.lower() not in ["yes", "y"]:
+            exit()
+
     global_start = time.time()
     if dist:
         client = Client(scheduler_file = f"cluster.info")

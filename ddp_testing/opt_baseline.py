@@ -12,14 +12,13 @@ from utils import *
 
 
 import torch
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import DataLoader
 import torch.nn as nn
 import torch.optim as optim
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data.distributed import DistributedSampler
-from torch.utils.data import Sampler, DataLoader, Dataset
-from dask.array.optimization import optimize
+from torch.utils.data import DataLoader
 
 
 from dask.distributed import LocalCluster
@@ -27,69 +26,11 @@ from dask.distributed import Client
 from dask_pytorch_ddp import dispatch, results
 from dask.distributed import wait as Wait
 
-
-"""
-PyTorch wrapper which sets its data
-equal to the data you pass it
-"""
-class CopyDataset(Dataset):
-    def __init__(self, data):
-        self.data = data # Dummy indices as data
-
-    def __len__(self):
-        return len(self.data)
-
-    def __getitem__(self, idx):
-        return self.data[idx]
-
-
-"""
-Enables indicies to be split in 
-a contingious way.
-"""
-class EvenChunkDistributedSampler(Sampler):
-    def __init__(self, dataset, num_replicas=None, rank=None, shuffle=False, drop_last=False):
-        super().__init__(dataset)
-        if num_replicas is None:
-            num_replicas = torch.distributed.get_world_size()
-        if rank is None:
-            rank = torch.distributed.get_rank()
-        
-        self.dataset = dataset
-        self.num_replicas = num_replicas
-        self.rank = rank
-        self.shuffle = shuffle
-        self.drop_last = drop_last
-
-        # Determine the number of samples per worker
-        total_size = len(self.dataset)
-        if self.drop_last:
-            self.num_samples = total_size // self.num_replicas
-            self.total_size = self.num_samples * self.num_replicas
-        else:
-            self.num_samples = math.ceil(total_size / self.num_replicas)
-            self.total_size = self.num_samples * self.num_replicas
-
-        # Generate indices
-        self.indices = list(range(total_size))
-        if self.shuffle:
-            self.indices = torch.randperm(total_size).tolist()
-
-    def __iter__(self):
-        # Split the dataset into even contiguous chunks
-        start = self.rank * self.num_samples
-        end = min(start + self.num_samples, len(self.indices))
-        return iter(self.indices[start:end])
-
-    def __len__(self):
-        return self.num_samples
-
-
 def parse_arguments():
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description="Description of your program.")
     parser.add_argument(
-        "-m", "--mode", type=str, default="index", help="Which version to run"
+        "-m", "--mode", type=str, default="dask", help="Which version to run"
     )
     parser.add_argument(
         "-g", "--gpu", type=str, default="False", help="Should data be preprocessed and migrated directly to the GPU"
@@ -123,21 +64,19 @@ def train(args=None, epochs=None, batch_size=None, allGPU=False, debug=False,
     torch.cuda.set_device(device)
     world_size = dist.get_world_size()
 
-    
-    
     if args.dataset == "pems-bay":
-        filepath = "../data/pems-bay.h5"
-        adj_filepath = "../data/adj_mx_bay.pkl"
+        filepath = "./data/pems-bay.h5"
+        adj_filepath = "./data/adj_mx_bay.pkl"
         key = "speed"
 
     elif args.dataset.lower() == "pems-all-la":
-        filepath = "../data/pems-all-la.h5"
-        adj_filepath = "../data/adj_mx_all_la.pkl"
+        filepath = "./data/pems-all-la.h5"
+        adj_filepath = "./data/adj_mx_all_la.pkl"
         key = "df"
     
     elif args.dataset.lower() == "pems":
-        filepath = "../data/pems.h5"
-        adj_filepath = "../data/adj_mx_pems.pkl"
+        filepath = "./data/pems.h5"
+        adj_filepath = "./data/adj_mx_pems.pkl"
         key = "df"
     
     else:
@@ -173,8 +112,6 @@ def train(args=None, epochs=None, batch_size=None, allGPU=False, debug=False,
     # Define optimizer and loss function
     optimizer = optim.Adam(model.parameters(), lr=0.001)
 
-
-    
     train_dataset = CopyDataset(x_train_idx)
     val_dataset = CopyDataset(x_val_idx)
     
@@ -197,10 +134,7 @@ def train(args=None, epochs=None, batch_size=None, allGPU=False, debug=False,
         model.train()
         train_loss = 0.0
         i = 1
-
-        
-        train_seg_start = time.time()
-        print(f"worker {worker_rank} - total: ", total,flush=True)
+    
         for batch in train_dataloader:
             batch = np.array(batch)
             
@@ -212,10 +146,6 @@ def train(args=None, epochs=None, batch_size=None, allGPU=False, debug=False,
                 t2 = time.time()
                 f1 = time.time()
                 
-            
-        
-                
-            
             X_batch = X_batch.to(device).float()
             y_batch = y_batch.to(device).float()
 
@@ -233,13 +163,11 @@ def train(args=None, epochs=None, batch_size=None, allGPU=False, debug=False,
             f2 = time.time()
   
             if debug and worker_rank == 0:
-                print(f"Train Batch: {i}/{total}; fetch {t2 - t1} | else {f2 - f1}", end="\n", flush=True)
+                print(f"Train Batch: {i}/{total}", end="\r", flush=True)
                 i += 1
 
         train_loss /= len(train_dataloader)
-        train_time_end  = time.time()
 
-        val_time_start = time.time()
         # Validation phase
         model.eval()
         val_loss = 0.0
@@ -249,13 +177,9 @@ def train(args=None, epochs=None, batch_size=None, allGPU=False, debug=False,
             print("                                   ",end="\r")
 
         i = 1
-        
-
-      
         with torch.no_grad():
             for batch in val_dataloader:
                 batch = np.array(batch)
-                
 
                 if args.mode == "dask":
                     batch = batch - x_train.shape[0]
@@ -264,7 +188,6 @@ def train(args=None, epochs=None, batch_size=None, allGPU=False, debug=False,
                     X_batch, y_batch = torch.tensor(x_val[batch].compute()), torch.tensor(y_val[batch].compute())
                     t2 = time.time()
                     f1 = time.time()
-                    batch_items = len(batch)
                 
                 X_batch = X_batch.to(device).float()
                 y_batch = y_batch.to(device).float()
@@ -275,16 +198,13 @@ def train(args=None, epochs=None, batch_size=None, allGPU=False, debug=False,
                 # Calculate loss (use only the first output channel, assuming it's the target)
                 loss = masked_mae_loss((outputs * std) + mean, (y_batch * std) + mean)
 
-                
-
                 val_loss += loss.item()
                 f2 = time.time()
                 if debug and worker_rank == 0:
-                    print(f"Val Batch: {i}/{total}; items: {batch_items}; fetch {t2 - t1} | else {f2 - f1}", end="\n", flush=True)
+                    print(f"Val Batch: {i}/{total}", end="\r", flush=True)
                     i += 1
                     
-        # # average valdiation across all ranks
-
+        # average valdiation across all ranks
         val_tensor = torch.tensor([val_loss, len(val_dataloader)])
         dist.reduce(val_tensor,dst=0, op=dist.ReduceOp.SUM)
         epoch_end = time.time()
@@ -312,8 +232,6 @@ def train(args=None, epochs=None, batch_size=None, allGPU=False, debug=False,
             
 
 def main():
-  
-
 
     args = parse_arguments()
     allGPU = args.gpu.lower() == "true"
@@ -335,18 +253,18 @@ def main():
     if args.mode == "dask":
         
         if args.dataset == "pems-bay":
-            filepath = "../data/pems-bay.h5"
-            adj_filepath = "../data/adj_mx_bay.pkl"
+            filepath = "./data/pems-bay.h5"
+            adj_filepath = "./data/adj_mx_bay.pkl"
             key = "speed"
     
         elif args.dataset.lower() == "pems-all-la":
-            filepath = "../data/pems-all-la.h5"
-            adj_filepath = "../data/adj_mx_all_la.pkl"
+            filepath = "./data/pems-all-la.h5"
+            adj_filepath = "./data/adj_mx_all_la.pkl"
             key = "df"
         
         elif args.dataset.lower() == "pems":
-            filepath = "../data/pems.h5"
-            adj_filepath = "../data/adj_mx_pems.pkl"
+            filepath = "./data/pems.h5"
+            adj_filepath = "./data/adj_mx_pems.pkl"
             key = "df"
         
         else:

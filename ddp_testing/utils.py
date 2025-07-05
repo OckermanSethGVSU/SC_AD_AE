@@ -8,6 +8,8 @@ import os
 import time
 import psutil
 from pynvml import nvmlInit, nvmlDeviceGetHandleByIndex, nvmlDeviceGetMemoryInfo, nvmlShutdown
+from torch.utils.data import Sampler, DataLoader, Dataset
+import math
 
 def masked_mae_loss(y_pred, y_true):
 
@@ -169,3 +171,59 @@ def collect_metrics():
     finally:
         # Shutdown NVML
         nvmlShutdown()
+
+
+"""
+PyTorch wrapper which sets its data
+equal to the data you pass it
+"""
+class CopyDataset(Dataset):
+    def __init__(self, data):
+        self.data = data # Dummy indices as data
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        return self.data[idx]
+
+"""
+Enables indicies to be split in 
+a contingious way.
+"""
+class EvenChunkDistributedSampler(Sampler):
+    def __init__(self, dataset, num_replicas=None, rank=None, shuffle=False, drop_last=False):
+        super().__init__(dataset)
+        if num_replicas is None:
+            num_replicas = torch.distributed.get_world_size()
+        if rank is None:
+            rank = torch.distributed.get_rank()
+        
+        self.dataset = dataset
+        self.num_replicas = num_replicas
+        self.rank = rank
+        self.shuffle = shuffle
+        self.drop_last = drop_last
+
+        # Determine the number of samples per worker
+        total_size = len(self.dataset)
+        if self.drop_last:
+            self.num_samples = total_size // self.num_replicas
+            self.total_size = self.num_samples * self.num_replicas
+        else:
+            self.num_samples = math.ceil(total_size / self.num_replicas)
+            self.total_size = self.num_samples * self.num_replicas
+
+        # Generate indices
+        self.indices = list(range(total_size))
+        if self.shuffle:
+            self.indices = torch.randperm(total_size).tolist()
+
+    def __iter__(self):
+        # Split the dataset into even contiguous chunks
+        start = self.rank * self.num_samples
+        end = min(start + self.num_samples, len(self.indices))
+        return iter(self.indices[start:end])
+
+    def __len__(self):
+        return self.num_samples
