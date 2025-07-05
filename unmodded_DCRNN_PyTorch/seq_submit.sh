@@ -8,16 +8,8 @@
 #PBS -o seq.out
 #PBS -e seq.err
 
-
-# module use /soft/modulefiles 
-# module load conda; conda activate
-# conda activate dask
-
-
 module use /soft/modulefiles 
 module load conda; conda activate
-
-conda activate index
 
 module load spack-pe-base/0.7.1
 module load spack-pe-base/0.8.1
@@ -49,23 +41,6 @@ python3 dcrnn_train_pytorch.py --config_filename=data/model/allLA.yaml
 
 # PEMS
 # python3 dcrnn_train_pytorch.py --config_filename=data/model/pems.yaml
-# mv ../seq_${nodes}_${num_worker}.out . 
-# mv ../seq_${nodes}_${num_worker}.err . 
 
-
-
-DATE=$(date +"%Y-%m-%d_%T")
-dir="seq_${DATE}"
-mkdir -p $dir
-
-cp -r model/ $dir
-cp -r scripts/ $dir
-cp -r lib/ $dir
-cp data/model/*.yaml $dir
-mv stats.txt $dir
-mv per_epoch_stats.txt $dir
-mv seq.out $dir
-mv seq.err $dir
-cp seq_submit.sh $dir
 
 
